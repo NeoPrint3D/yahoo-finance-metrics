@@ -37,9 +37,15 @@ sh run.sh
 ### Rust Usage
 
 - Must have rustup installed with cargo and rustc
+- Must place the config.jsonn file into /etc/yahoo-finance-metrics/config.json
 
 ```bash
 cargo build --release
 # Run the binary
 ./target/release/yahoo-finance-metrics
 ```
+
+## TODO
+
+- [ ] Add more metrics
+- [ ] Add more support for different OS's
