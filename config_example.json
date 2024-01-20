@@ -1,0 +1,104 @@
+{
+  "message": "Hello World from the etc Directory",
+  "cookies": [
+    {
+      "name": "gpp_sid",
+      "value": "-1",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "cmp",
+      "value": "t=1705477158&j=0&u=1YNN",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "A3",
+      "value": "",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "A1",
+      "value": "",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "GUC",
+      "value": "",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "A1S",
+      "value": "",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "PRF",
+      "value": "",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "Y",
+      "value": "",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "T",
+      "value": "",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "OTH",
+      "value": "",
+
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "PH",
+      "value": "l-en-US",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "F",
+      "value": "",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "gpp",
+      "value": "",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    },
+    {
+      "name": "maex",
+      "value": "",
+      "domain": ".yahoo.com",
+      "path": "/",
+      "expires": -1
+    }
+  ]
+}
