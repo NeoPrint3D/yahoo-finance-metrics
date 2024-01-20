@@ -50,3 +50,4 @@ cargo build --release
 - [ ] Add more metrics
 - [ ] Add more support for different OS's
 - [ ] Add more support for more than one portfolios (currently only supports one which is the first one in the list)
+- [x] public docker container
