@@ -6,6 +6,7 @@ use std::fs;
 use std::process;
 use tokio::time::{sleep, Duration};
 use utils::get_stock_data::{fetch_stock_data, StockMetrics};
+use utils::get_stock_market_status::is_stock_market_open;
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -24,12 +25,16 @@ async fn hello() -> impl Responder {
 
 #[get("/metrics")]
 async fn metrics() -> impl Responder {
-    // see if this is a production build or not
     let metrics_path = if cfg!(debug_assertions) {
         "src/data/metrics.json"
     } else {
         "/etc/yahoo-finance-metrics/metrics.json"
     };
+
+    if !std::path::Path::new(metrics_path).exists() {
+        let _ = fetch_stock_data();
+    }
+
     let metrics_json = fs::read_to_string(metrics_path).expect("Unable to read metrics file");
     let metrics: StockMetrics = serde_json::from_str(&metrics_json).expect("Unable to parse JSON");
     HttpResponse::Ok().body(format!(
@@ -38,15 +43,29 @@ async fn metrics() -> impl Responder {
         metrics.daily_gain_percent_value,
         metrics.daily_gain_value,
         metrics.total_gain_value,
-        metrics.total_gain_percent_value
+        metrics.total_gain_percent_value,
     ))
 }
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     actix_rt::spawn(async {
         loop {
-            fetch_stock_data().expect("Unable to fetch stock data");
-            sleep(Duration::from_secs(15)).await;
+            let is_open = is_stock_market_open().await;
+            match is_open {
+                Ok(is_open) => {
+                    if is_open {
+                        let _ = fetch_stock_data();
+                        println!("Market is open, fetching data")
+                    } else {
+                        println!("Market is closed, not fetching data")
+                    }
+                }
+                Err(e) => {
+                    println!("Unable to fetch market data: {}", e);
+                }
+            }
+            sleep(Duration::from_secs(60 * 5)).await;
         }
     });
 
