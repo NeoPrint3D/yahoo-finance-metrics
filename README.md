@@ -62,7 +62,7 @@ cargo build --release
 ## TODO
 
 - [ ] Add more metrics
-- [x] Only scrapes when the market is open
+- [ ] Only scrapes when the market is open
 - [ ] Add more support for different OS's
 - [ ] Add more support for more than one portfolios (currently only supports one which is the first one in the list)
 - [x] public docker container

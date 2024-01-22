@@ -51,21 +51,8 @@ async fn metrics() -> impl Responder {
 async fn main() -> std::io::Result<()> {
     actix_rt::spawn(async {
         loop {
-            let is_open = is_stock_market_open().await;
-            match is_open {
-                Ok(is_open) => {
-                    if is_open {
-                        let _ = fetch_stock_data();
-                        println!("Market is open, fetching data")
-                    } else {
-                        println!("Market is closed, not fetching data")
-                    }
-                }
-                Err(e) => {
-                    println!("Unable to fetch market data: {}", e);
-                }
-            }
-            sleep(Duration::from_secs(60 * 5)).await;
+            fetch_stock_data().expect("Unable to fetch stock data");
+            sleep(Duration::from_secs(15)).await;
         }
     });
 

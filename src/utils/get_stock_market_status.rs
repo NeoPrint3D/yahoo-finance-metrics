@@ -7,6 +7,7 @@ pub async fn is_stock_market_open() -> Result<bool, Box<dyn std::error::Error>> 
         .json()
         .await
         .expect("Unable to parse market data");
+    println!("Market data: {}", res);
     let is_open = res["isTheStockMarketOpen"]
         .as_bool()
         .expect("Unable to parse JSON");
