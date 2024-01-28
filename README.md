@@ -1,3 +1,5 @@
+⚠️ Might break, still need to do some testing do not use in production or expect reliability
+
 # Yahoo Finance Metrics for portfolios
 
 ![Grafana Dashboard](assets/thumb.png)
