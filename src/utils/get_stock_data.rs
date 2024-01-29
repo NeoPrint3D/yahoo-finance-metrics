@@ -122,5 +122,12 @@ pub fn fetch_stock_data() {
             .unwrap_or(0.0),
     };
 
+    let metrics_path = if cfg!(debug_assertions) {
+        "src/data/metrics.json"
+    } else {
+        "/etc/yahoo-finance-metrics/metrics.json"
+    };
+    let metrics_json = serde_json::to_string_pretty(&metrics).expect("Unable to serialize metrics");
+    fs::write(metrics_path, metrics_json).expect("Unable to write metrics file");
     println!("Metrics: {:?}", metrics);
 }
