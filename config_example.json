@@ -1,5 +1,4 @@
 {
-  "message": "Hello World from the etc Directory",
   "cookies": [
     {
       "name": "gpp_sid",
@@ -100,5 +99,7 @@
       "path": "/",
       "expires": -1
     }
-  ]
+  ],
+  "message": "Hello World from the etc Directory",
+  "exchange": "NYSE"
 }

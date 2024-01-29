@@ -1,48 +1,7 @@
-use headless_chrome::protocol::cdp::Network::CookieParam;
 use headless_chrome::{Browser, LaunchOptionsBuilder, Tab};
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::error::Error;
-use std::fs;
-
-use std::sync::Arc;
-
-fn fetch_text(tab: &Arc<Tab>, selector: &str) -> Result<Option<String>, Box<dyn Error>> {
-    match tab.wait_for_element(selector) {
-        Ok(element) => match element.get_inner_text() {
-            Ok(text) => Ok(Some(text)),
-            Err(e) => {
-                eprintln!("Error getting inner text: {}", e);
-                Ok(None)
-            }
-        },
-        Err(_) => {
-            eprintln!("Element not found for selector: {}", selector);
-            Ok(None)
-        }
-    }
-}
-
-fn parse_value(
-    text: Option<String>,
-    index: usize,
-    trim_chars: &[char],
-) -> Result<Option<f32>, Box<dyn Error>> {
-    match text {
-        Some(t) => {
-            let value = t
-                .split_whitespace()
-                .nth(index)
-                .ok_or(format!("Failed to parse value at index: {}", index))?
-                .trim_matches(trim_chars)
-                .replace(",", "")
-                .parse::<f32>()?;
-            Ok(Some(value))
-        }
-        None => Ok(None), // No text to parse, so return None
-    }
-}
+use std::{fs, sync::Arc};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StockMetrics {
@@ -53,72 +12,115 @@ pub struct StockMetrics {
     pub total_gain_percent_value: f32,
 }
 
-pub fn fetch_stock_data() -> Result<(), Box<dyn Error>> {
+fn fetch_text(tab: &Arc<Tab>, selector: &str) -> Option<String> {
+    tab.wait_for_element(selector).ok()?.get_inner_text().ok()
+}
+
+fn parse_value(text: Option<String>, index: usize, trim_chars: &[char]) -> Option<f32> {
+    text?
+        .split_whitespace()
+        .nth(index)?
+        .trim_matches(trim_chars)
+        .replace(",", "")
+        .parse::<f32>()
+        .ok()
+}
+
+pub fn fetch_stock_data() {
     let options = LaunchOptionsBuilder::default()
         .window_size(Some((1280, 1280)))
         .headless(true)
         .sandbox(false)
         .port(Some(9222))
         .build()
-        .unwrap();
-    let browser = Browser::new(options).expect("Unable to create Browser");
-    let tab = browser.new_tab()?;
-    let config_content = fs::read_to_string("/etc/yahoo-finance-metrics/config.json")?;
-    let config: Value = serde_json::from_str(&config_content)?;
+        .expect("Failed to build launch options");
 
-    if let Some(cookies_json) = config.get("cookies").and_then(|v| v.as_array()) {
-        let cookies: Vec<CookieParam> = cookies_json
+    let browser = match Browser::new(options) {
+        Ok(browser) => browser,
+        Err(e) => {
+            eprintln!("Error creating browser: {}", e);
+            return;
+        }
+    };
+
+    let tab = match browser.new_tab() {
+        Ok(tab) => tab,
+        Err(e) => {
+            eprintln!("Error creating new tab: {}", e);
+            return;
+        }
+    };
+
+    let config_path = if cfg!(debug_assertions) {
+        "src/data/config.json"
+    } else {
+        "/etc/yahoo-finance-metrics/config.json"
+    };
+    let config_content = match fs::read_to_string(config_path) {
+        Ok(content) => content,
+        Err(e) => {
+            eprintln!("Error reading config file: {}", e);
+            return;
+        }
+    };
+
+    let config: Value = match serde_json::from_str(&config_content) {
+        Ok(config) => config,
+        Err(e) => {
+            eprintln!("Error parsing config JSON: {}", e);
+            return;
+        }
+    };
+
+    let cookies: Vec<_> = match config.get("cookies").and_then(|v| v.as_array()) {
+        Some(cookies_json) => cookies_json
             .iter()
-            .map(|cookie| {
-                serde_json::from_value(cookie.clone()).expect("Unable to parse cookie from config")
-            })
-            .collect();
+            .filter_map(|cookie| serde_json::from_value(cookie.clone()).ok())
+            .collect(),
+        None => {
+            eprintln!("Missing or invalid 'cookies' in config");
+            return;
+        }
+    };
 
-        tab.set_cookies(cookies)?;
-    } else {
-        return Err("Missing or invalid 'cookies' in config".into());
+    if let Err(e) = tab.set_cookies(cookies) {
+        eprintln!("Error setting cookies: {}", e);
+        return;
     }
 
-    tab.navigate_to("https://finance.yahoo.com/portfolio/p_0/view/v1")?;
-    tab.wait_until_navigated()?;
+    if let Err(e) = tab.navigate_to("https://finance.yahoo.com/portfolio/p_0/view/v1") {
+        eprintln!("Error navigating to URL: {}", e);
+        return;
+    }
 
-    let total_holding = fetch_text(
-        &tab,
+    tab.wait_until_navigated().expect("Failed to navigate");
+
+    let selectors = vec![
         "div[data-yaft-module=\"tdv2-applet-fin-portfolio-gainloss\"] > div > span",
-    );
-    let daily_gain = fetch_text(&tab, "div[data-yaft-module=\"tdv2-applet-fin-portfolio-gainloss\"] > div:nth-of-type(3) > span:nth-of-type(2)");
-    let total_gain = fetch_text(&tab, "div[data-yaft-module=\"tdv2-applet-fin-portfolio-gainloss\"] > div:nth-of-type(4) > span:nth-of-type(2)");
+        "div[data-yaft-module=\"tdv2-applet-fin-portfolio-gainloss\"] > div:nth-of-type(3) > span:nth-of-type(2)",
+        "div[data-yaft-module=\"tdv2-applet-fin-portfolio-gainloss\"] > div:nth-of-type(4) > span:nth-of-type(2)",
+    ];
 
-    let total_holding_value = parse_value(total_holding?, 0, &['$', ','])?;
-    let total_gain_value = parse_value(total_gain?, 0, &['$', ','])?;
-    let daily_gain_value = parse_value(daily_gain?, 0, &['$', ','])?;
-    let total_gain_percent_value = parse_value(total_gain?, 1, &['$', ',', '%'])?;
-    let daily_gain_percent_value = parse_value(daily_gain?, 1, &['$', ',', '%'])?;
+    let values: Vec<_> = selectors
+        .iter()
+        .map(|&selector| fetch_text(&tab, selector))
+        .collect();
 
-    if total_holding_value.is_none()
-        && daily_gain_percent_value.is_none()
-        && daily_gain_value.is_none()
-        && total_gain_value.is_none()
-        && total_gain_percent_value.is_none()
-    {
-        println!("All metrics are None. Skipping file write.");
-    } else {
-        let metrics = StockMetrics {
-            total_holding_value: total_holding_value.unwrap_or(0.0),
-            daily_gain_percent_value: daily_gain_percent_value.unwrap_or(0.0),
-            daily_gain_value: daily_gain_value.unwrap_or(0.0),
-            total_gain_value: total_gain_value.unwrap_or(0.0),
-            total_gain_percent_value: total_gain_percent_value.unwrap_or(0.0),
-        };
-        println!("Metrics: {:?}", metrics);
-        let metrics_json_string = serde_json::to_string(&metrics)?;
-        let metrics_path = if cfg!(debug_assertions) {
-            "src/data/metrics.json"
-        } else {
-            "/etc/yahoo-finance-metrics/metrics.json"
-        };
-
-        fs::write(metrics_path, metrics_json_string)?;
+    if values.iter().any(|v| v.is_none()) {
+        eprintln!("Failed to fetch some values");
+        return;
     }
-    Ok(())
+
+    // format -13.68 (-0.33%)
+    let metrics = StockMetrics {
+        total_holding_value: parse_value(values[0].clone(), 0, &['$', ',']).unwrap_or(0.0),
+        daily_gain_value: parse_value(values[1].clone(), 0, &['$', ',']).unwrap_or(0.0),
+        daily_gain_percent_value: parse_value(values[1].clone(), 1, &['(', '%', ')'])
+            .unwrap_or(0.0),
+        total_gain_value: parse_value(values[2].clone(), 0, &['$', ',']).unwrap_or(0.0),
+        total_gain_percent_value: parse_value(values[2].clone(), 1, &['(', '%', ')'])
+            .unwrap_or(0.0),
+    };
+
+    println!("Metrics: {:?}", metrics);
 }

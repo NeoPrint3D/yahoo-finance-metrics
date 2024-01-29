@@ -1,26 +1,89 @@
 mod utils;
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 
-use actix_web::{get, App, HttpResponse, HttpServer, Responder};
-use serde_json;
+use handlebars::DirectorySourceOptions;
+use handlebars::Handlebars;
+use serde::Deserialize;
+use serde_json::json;
 use std::fs;
 use std::process;
+use strum::IntoEnumIterator;
 use tokio::time::{sleep, Duration};
 use utils::get_stock_data::{fetch_stock_data, StockMetrics};
-use utils::get_stock_market_status::is_stock_market_open;
+use utils::get_stock_exchange_info::{get_exchange_info, is_exchange_open, Exchange};
+
+#[derive(Debug, Deserialize)]
+struct SettingsForm {
+    exchange: String,
+}
 
 #[get("/")]
-async fn hello() -> impl Responder {
-    let config_str = fs::read_to_string("/etc/yahoo-finance-metrics/config.json")
-        .expect("Unable to read config file");
+async fn hello(hb: web::Data<Handlebars<'_>>) -> impl Responder {
+    let config_path = if cfg!(debug_assertions) {
+        "src/data/config.json"
+    } else {
+        "/etc/yahoo-finance-metrics/config.json"
+    };
+
+    let config_str = fs::read_to_string(config_path).expect("Unable to read config file");
     let config: serde_json::Value =
         serde_json::from_str(&config_str).expect("Unable to parse config file");
 
-    let msg = format!(
-        "Hello from {}!\n",
-        config["message"].as_str().unwrap_or("Unknown")
-    );
+    let data = json!({
+        "title": "Yahoo Finance Metrics",
+        "message": config["message"].as_str().unwrap_or("Hello, world!"),
+    });
 
-    HttpResponse::Ok().body(msg)
+    let body = hb.render("index", &data).unwrap();
+
+    HttpResponse::Ok().body(body)
+}
+
+#[get("/settings")]
+async fn settings(hb: web::Data<Handlebars<'_>>) -> impl Responder {
+    let config_path = if cfg!(debug_assertions) {
+        "src/data/config.json"
+    } else {
+        "/etc/yahoo-finance-metrics/config.json"
+    };
+
+    let config_str = fs::read_to_string(config_path).expect("Unable to read config file");
+    let config: serde_json::Value =
+        serde_json::from_str(&config_str).expect("Unable to parse config file");
+
+    let exchange = get_exchange_info(config["exchange"].as_str().unwrap_or("NYSE"));
+    let data = json!({
+        "exchange": exchange,
+        "is_market_open": is_exchange_open(config["exchange"].as_str().unwrap_or("NYSE")),
+        "exchanges": Exchange::iter().map(|e| e.to_string()).collect::<Vec<String>>(),
+    });
+
+    println!("{:?}", data);
+
+    let body = hb.render("settings", &data).unwrap();
+
+    HttpResponse::Ok().body(body)
+}
+#[post("/settings")]
+async fn update_settings(form: web::Json<SettingsForm>) -> impl Responder {
+    let config_path = if cfg!(debug_assertions) {
+        "src/data/config.json"
+    } else {
+        "/etc/yahoo-finance-metrics/config.json"
+    };
+
+    let config_str = fs::read_to_string(config_path).expect("Unable to read config file");
+    let mut config: serde_json::Value =
+        serde_json::from_str(&config_str).expect("Unable to parse config file");
+    config["exchange"] = json!(form.exchange);
+    let config_str = serde_json::to_string_pretty(&config).expect("Unable to serialize config");
+
+    fs::write(config_path, config_str).expect("Unable to write config file");
+    HttpResponse::Ok().json(json!({
+       "exchange": get_exchange_info(form.exchange.as_str()),
+       "is_market_open": is_exchange_open(form.exchange.as_str()),
+       "message": format!("Updated exchange to {}", form.exchange),
+    }))
 }
 
 #[get("/metrics")]
@@ -51,16 +114,46 @@ async fn metrics() -> impl Responder {
 async fn main() -> std::io::Result<()> {
     actix_rt::spawn(async {
         loop {
-            fetch_stock_data().expect("Unable to fetch stock data");
+            let config_path = if cfg!(debug_assertions) {
+                "src/data/config.json"
+            } else {
+                "/etc/yahoo-finance-metrics/config.json"
+            };
+            let config_str = fs::read_to_string(config_path).expect("Unable to read config file");
+            let config: serde_json::Value =
+                serde_json::from_str(&config_str).expect("Unable to parse config file");
+            let is_open = is_exchange_open(config["exchange"].as_str().unwrap_or("NYSE"));
+            if is_open {
+                let _ = fetch_stock_data();
+            } else {
+                println!("Market is closed");
+            }
             sleep(Duration::from_secs(15)).await;
         }
     });
+    let mut handlebars = Handlebars::new();
+    // should be a path to templates directory
+    let options: DirectorySourceOptions = DirectorySourceOptions {
+        tpl_extension: ".html".to_string(),
+        hidden: false,
+        temporary: true,
+    };
+    handlebars
+        .register_templates_directory("src/static/templates", options)
+        .unwrap();
 
-    let server =
-        HttpServer::new(|| App::new().service(hello).service(metrics)).bind(("0.0.0.0", 8080))?;
-
-    let result = server.run().await;
+    let server = HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(handlebars.clone()))
+            .service(hello)
+            .service(metrics)
+            .service(settings)
+            .service(update_settings)
+    })
+    .bind(("0.0.0.0", 8080))?
+    .run()
+    .await;
 
     // Kill the process when the program is ended
-    process::exit(result.is_err() as i32);
+    process::exit(server.is_err() as i32);
 }

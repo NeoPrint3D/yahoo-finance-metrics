@@ -1,0 +1,132 @@
+<html lang="en" data-theme="retro">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Yahoo Finance Metrics</title>
+    <link href="https://fonts.googleapis.com/css2?family=Oswald&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.6.0/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        body {
+            font-family: 'Oswald', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-base-200 min-h-screen px-5">
+    <header class="flex items-center h-20 fixed top-0">
+        <a class="text-2xl font-bold" href="/">
+            Yahoo Finance Metrics
+        </a>
+    </header>
+    <main class="flex flex-col items-center justify-center h-screen">
+        <div class="hidden" id="timeZone">
+            {{exchange.time_zone}}
+        </div>
+        <div class="p-7 max-w-md w-full bg-neutral rounded-xl flex justify-center flex-col">
+            <h1 class="text-5xl font-bold text-white">
+                Settings
+            </h1>
+            <div class="text-white my-5 w-full">
+                {{#with exchange}}
+                <h2 class="text-xl text-white" id="currentExchange">
+                    Current Exchange:
+                    {{name}}
+                </h2>
+                <h3>
+                    Local Market Hours <span class="font-bold" id="marketHours">{{open_hour}} - {{close_hour}}</span>
+                </h3>
+                {{/with}}
+                {{#if is_market_open}}
+                <p>The Market is Currently <span class="font-bold">open</span>.</p>
+                {{else}}
+                <p>The Market is Currently <span class="font-bold">closed</span>.</p>
+                {{/if}}
+            </div>
+
+            <form id="settingsForm" class="w-full" onsubmit="submitForm(event)">
+                <div class="flex flex-col items-start gap-1">
+                    <label for="exchange" class="text-white">Exchange</label>
+                    <select name="exchange" class="select select-primary w-full" id="exchange">
+                        <option disabled="disabled" selected="" value="">Select an
+                            exchange</option>
+                        {{#each exchanges}}
+                        <option value="{{this}}">{{this}}</option>
+                        {{/each}}
+                    </select>
+                </div>
+                <button class="btn w-full btn-primary mt-7">
+                    Save
+                </button>
+            </form>
+        </div>
+    </main>
+    <script>
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const timeZone = document.getElementById('timeZone').textContent.trim()
+            const [open_hour, close_hour] = document.getElementById('marketHours').textContent.split(' - ').map(hour => formatHour(parseFloat(hour) + findLocalTimezoneOffset(timeZone)))
+
+            document.getElementById("marketHours").innerHTML = `${open_hour} - ${close_hour}`
+        });
+
+
+
+        function formatHour(hour) {
+            const wholeHour = Math.floor(hour);
+            const minutes = Math.round((hour - wholeHour) * 60);
+            const isPM = wholeHour >= 12;
+            const suffix = isPM ? 'PM' : 'AM';
+            const formattedHour = (wholeHour % 12) || 12;
+            const formattedMinutes = minutes < 10 ? '0' + minutes : minutes;
+            return `${formattedHour}:${formattedMinutes} ${suffix}`;
+        }
+
+        function findLocalTimezoneOffset(inputTimeZone) {
+            const now = new Date();
+            const localDate = new Date(now.toLocaleString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
+            const inputDate = new Date(now.toLocaleString('en-US', { timeZone: inputTimeZone }));
+            const offsetInMinutes = (localDate - inputDate) / (60 * 1000);
+            const offsetInHours = offsetInMinutes / 60;
+            return offsetInHours;
+        }
+
+
+        function submitForm(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries()); // Convert FormData to a plain object
+
+            fetch('/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json', // Indicating we're sending JSON
+                },
+                body: JSON.stringify(data), // Convert the JavaScript object to a JSON string
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(res => {
+                    alert(`Success: ${res.message}`)
+                    document.getElementById('currentExchange').innerHTML = `Current Exchange: ${res.exchange.name}`
+                    const timeZone = res.exchange.time_zone
+                    document.getElementById('timeZone').innerHTML = timeZone
+                    const [open_hour, close_hour] = [res.exchange.open_hour, res.exchange.close_hour].map(hour => formatHour(parseFloat(hour) + findLocalTimezoneOffset(timeZone)))
+                    document.getElementById("marketHours").innerHTML = `${open_hour} - ${close_hour}`
+                })
+                .catch(error => {
+                    alert(`Error: ${error.message}`); // Display error message
+                });
+        }
+    </script>
+
+</body>
+
+</html>
